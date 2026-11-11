@@ -16,7 +16,7 @@ const STORAGE_KEYS = {
 };
 
 export const DEFAULT_SETTINGS = {
-  mapSkin: '01-dark', // 默认经典深色街道
+  mapSkin: '03-fast-blue', // 默认蓝色地球
   planeSkin: '01-airliner', // 巡航航天飞行器模型皮肤
   showStars: true, // 深空点点星宿背景
   showHalo: false, // 3D 大气层微光晕 (默认关闭)
@@ -109,10 +109,19 @@ export function seedLikeCount(spotId = '') {
 }
 
 export const storage = {
+  getRecentSpots() {
+    const recent = readJson(STORAGE_KEYS.RECENT, []);
+    return Array.isArray(recent) ? recent.filter(id => typeof id === 'string').slice(0, 12) : [];
+  },
+
+  addRecentSpot(id) {
+    if (typeof id !== 'string' || !id) return;
+    writeJson(STORAGE_KEYS.RECENT, [id, ...this.getRecentSpots().filter(item => item !== id)].slice(0, 12));
+  },
   // Settings (Map layers, geography labels, autoplay, autospin, plane skin)
   getSettings() {
     const saved = readJson(STORAGE_KEYS.SETTINGS, {});
-    const skin = saved.mapSkin || '01-dark';
+    const skin = saved.mapSkin || DEFAULT_SETTINGS.mapSkin;
     const planeSkin = ['01-airliner', '04-ufo'].includes(saved.planeSkin)
       ? saved.planeSkin
       : '01-airliner';
@@ -211,10 +220,17 @@ export const storage = {
   },
 
   async loadCommunityPostsWithMedia(existingSpots = []) {
-    const json = await requestJson('/api/community/spots', { cache: 'no-store' });
-    if (!Array.isArray(json.spots)) {
-      throw new Error('社区点位响应格式不正确');
-    }
+    const json = { spots: [] };
+    let cursor = null;
+    const visited = new Set();
+    do {
+      const page = await requestJson(`/api/community/spots${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { cache: 'no-store' });
+      if (!Array.isArray(page.spots)) throw new Error('社区点位响应格式不正确');
+      json.spots.push(...page.spots);
+      cursor = page.nextCursor || null;
+      if (cursor && visited.has(cursor)) throw new Error('社区分页响应重复，请稍后重试');
+      if (cursor) visited.add(cursor);
+    } while (cursor);
 
     let changed = false;
     json.spots.forEach(serverSpot => {

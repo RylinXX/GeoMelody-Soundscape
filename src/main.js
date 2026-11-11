@@ -12,6 +12,7 @@ import { shareCardManager } from './utils/shareCard.js';
 import { initGlobalImageFallback, getFallbackCover } from './utils/imageFallback.js';
 import { applyAirplaneSkin } from './map/airplaneSkin.js';
 import { resolveUserLocation } from './utils/geoLocator.js';
+import { initDiscovery } from './discovery.js';
 import {
   LANGUAGES,
   applyTranslations,
@@ -50,25 +51,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const THEME_STORAGE_KEY = 'geomelody-map-style';
   const THEME_DEFAULT_VERSION_KEY = 'geomelody-map-default-version';
-  const THEME_DEFAULT_VERSION = 'classic-dark-v1';
+  const THEME_DEFAULT_VERSION = 'blue-globe-v2';
   let viewMode = '3d';
   let activeRegion = 'asia';
   let currentLanguage = getInitialLanguage();
   let currentSettings = storage.getSettings();
-  let currentMapSkin = '01-dark';
+  let currentMapSkin = DEFAULT_SETTINGS.mapSkin;
   let migratedDefaultTheme = false;
   try {
     const savedMapSkin = localStorage.getItem(THEME_STORAGE_KEY);
     const needsDefaultMigration = localStorage.getItem(THEME_DEFAULT_VERSION_KEY) !== THEME_DEFAULT_VERSION;
-    migratedDefaultTheme = needsDefaultMigration && (!savedMapSkin || savedMapSkin === '03-fast-blue');
+    migratedDefaultTheme = needsDefaultMigration && (!savedMapSkin || savedMapSkin === '01-dark');
     currentMapSkin = migratedDefaultTheme
-      ? '01-dark'
-      : (savedMapSkin || currentSettings.mapSkin || '01-dark');
+      ? DEFAULT_SETTINGS.mapSkin
+      : (savedMapSkin || currentSettings.mapSkin || DEFAULT_SETTINGS.mapSkin);
     localStorage.setItem(THEME_DEFAULT_VERSION_KEY, THEME_DEFAULT_VERSION);
-    if (migratedDefaultTheme) localStorage.setItem(THEME_STORAGE_KEY, '01-dark');
+    if (migratedDefaultTheme) localStorage.setItem(THEME_STORAGE_KEY, DEFAULT_SETTINGS.mapSkin);
   } catch {}
   const validSkins = ['03-fast-blue', '01-dark', 'white-terrain', 'fast-dark', 'rich-dark', 'light'];
-  if (!validSkins.includes(currentMapSkin)) currentMapSkin = '01-dark';
+  if (!validSkins.includes(currentMapSkin)) currentMapSkin = DEFAULT_SETTINGS.mapSkin;
   let currentTheme = currentMapSkin === 'light' ? 'light' : 'dark';
   currentSettings.mapSkin = currentMapSkin;
   if (migratedDefaultTheme) currentSettings = storage.saveSettings({ mapSkin: currentMapSkin });
@@ -225,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         globeManager.flyToSpot(spot, undefined, true);
       } else {
         // 普通模式下：点击光点直接进入播放
-        playerManager.openSpot(spot, true);
+        playerManager.openSpot(spot, storage.getSettings().autoPlay);
       }
     },
     onFlybyPlay: spot => {
@@ -253,9 +254,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const globeInitPromise = globeManager.init().catch(error => {
     document.documentElement.dataset.mapError = error?.message || String(error);
     const loadingStatus = document.getElementById('globe-loading-status');
-    if (loadingStatus) loadingStatus.textContent = '地图加载失败，请刷新重试';
+    if (loadingStatus) loadingStatus.textContent = currentLanguage === 'en'
+      ? 'Map unavailable. You can still play featured soundscapes.'
+      : '地图暂不可用，你仍可从精选卡片开始收听。';
+    document.getElementById('map-retry-btn')?.removeAttribute('hidden');
     console.error('[GeoMelody map] Initialization failed.', error);
   });
+  document.getElementById('map-retry-btn')?.addEventListener('click', () => window.location.reload());
+  window.setTimeout(() => {
+    if (document.getElementById('globe-loading-shell')?.classList.contains('is-hidden')) return;
+    const status = document.getElementById('globe-loading-status');
+    if (status) status.textContent = currentLanguage === 'en'
+      ? 'Map is taking longer. Try a featured soundscape while you wait.'
+      : '地图加载较慢，可以先从精选卡片开始收听。';
+    document.getElementById('map-retry-btn')?.removeAttribute('hidden');
+  }, 12000);
 
   playerManager = new PlayerManager({
     spots: SCENIC_SPOTS,
@@ -267,6 +280,16 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     onExit: spot => updateMiniAudioIsland(spot, soundEngine.isPlaying),
     showToast
+  });
+
+  const discovery = initDiscovery({
+    spots: SCENIC_SPOTS,
+    getLanguage: () => currentLanguage,
+    onPlay: spot => {
+      exitRoamingMode();
+      hideSpotPreviewCard();
+      playerManager.openSpot(spot, true);
+    }
   });
 
   communityManager = new CommunityManager({
@@ -383,10 +406,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const isZh = currentLanguage !== LANGUAGES.EN;
 
     const hotSpots = [
-      { id: 'westlake_5a', name: '杭州西湖', enName: 'West Lake' },
-      { id: 'forbidden_city', name: '北京故宫', enName: 'Forbidden City' },
+      { id: 'westlake', name: '杭州西湖', enName: 'West Lake' },
+      { id: 'forbiddencity', name: '北京故宫', enName: 'Forbidden City' },
       { id: 'everest', name: '珠穆朗玛峰', enName: 'Mt. Everest' },
-      { id: 'mount_tai', name: '泰山', enName: 'Mount Tai' },
+      { id: 'taishan', name: '泰山', enName: 'Mount Tai' },
       { id: 'guilin_5a', name: '桂林漓江', enName: 'Li River' },
       { id: 'paris', name: '巴黎铁塔', enName: 'Eiffel Tower' },
       { id: 'santorini', name: '圣托里尼', enName: 'Santorini' }
@@ -405,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="search-dropdown-section">
         <div class="search-section-header">${isZh ? '热门胜景推荐' : 'Popular Spots'}</div>
         <div class="search-tag-group">
-          ${hotSpots.map(s => `
+          ${hotSpots.filter(s => SCENIC_SPOTS.some(spot => spot.id === s.id)).map(s => `
             <button class="search-tag-chip" type="button" data-action="spot" data-id="${s.id}">
               ${isZh ? s.name : s.enName}
             </button>
@@ -622,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==================== Hot Leaderboard Drawer Management ====================
   function renderLeaderboard() {
     if (!leaderboardListContainer) return;
-    const ranked = storage.getLeaderboardSpots(SCENIC_SPOTS);
+    const ranked = SCENIC_SPOTS.filter(spot => getDemoTrack(spot).url && !spot.isCommunity).slice(0, 20).map(spot => ({ spot }));
 
     if (!ranked.length) {
       leaderboardListContainer.innerHTML = `<div class="empty-state"><span>暂无排行榜数据</span></div>`;
@@ -630,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     leaderboardListContainer.innerHTML = ranked.map((item, index) => {
-      const { spot, likes } = item;
+      const { spot } = item;
       const rank = index + 1;
       const rankClass = rank === 1 ? 'rank-1' : (rank === 2 ? 'rank-2' : (rank === 3 ? 'rank-3' : ''));
       const rankLabel = String(rank).padStart(2, '0');
@@ -648,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="leaderboard-track-name">${escapeHtml(track.title)} · ${escapeHtml(track.creator)}</div>
             <div class="leaderboard-meta-row">
               <span>${escapeHtml(spotLocation)}</span>
-              <span class="leaderboard-likes-count">赞 ${likes.toLocaleString()}</span>
+              <span class="leaderboard-likes-count">${currentLanguage === 'en' ? 'Curated' : '编辑精选'}</span>
             </div>
           </div>
         </div>
@@ -758,7 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function syncSettingsInputs() {
     currentSettings = storage.getSettings();
-    if (selectMapSkinInput) selectMapSkinInput.value = currentMapSkin || '01-dark';
+    if (selectMapSkinInput) selectMapSkinInput.value = currentMapSkin || DEFAULT_SETTINGS.mapSkin;
     if (selectPlaneSkinInput) selectPlaneSkinInput.value = currentSettings.planeSkin || '01-airliner';
     if (toggleStarsInput) toggleStarsInput.checked = Boolean(currentSettings.showStars);
     if (toggleHaloInput) toggleHaloInput.checked = Boolean(currentSettings.showHalo);
@@ -816,7 +839,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   resetSettingsBtn?.addEventListener('click', () => {
     currentSettings = storage.resetSettings();
-    applyMapSkin('01-dark');
+    applyMapSkin(DEFAULT_SETTINGS.mapSkin);
     applyAirplaneSkin('01-airliner');
     syncSettingsInputs();
     globeManager.applyMapSettings(currentSettings);
@@ -836,6 +859,7 @@ document.addEventListener('DOMContentLoaded', () => {
     playerManager.setLanguage(currentLanguage);
     communityManager.setLanguage(currentLanguage);
     renderRegionNavigation();
+    discovery.render();
     renderFavoritesList();
     if (leaderboardDrawer?.classList.contains('open')) renderLeaderboard();
     if (searchInput?.value) renderSearchResults(searchInput.value);
@@ -852,7 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function applyMapSkin(skin) {
-    currentMapSkin = skin || '01-dark';
+    currentMapSkin = skin || DEFAULT_SETTINGS.mapSkin;
     const isLightSkin = currentMapSkin === 'white-terrain' || currentMapSkin === 'light' || currentMapSkin === '02-white-terrain';
     currentTheme = isLightSkin ? 'light' : 'dark';
     
@@ -1213,7 +1237,19 @@ document.addEventListener('DOMContentLoaded', () => {
     miniIsland?.classList.remove('visible');
   });
   soundEngine.subscribe((event, data) => {
+    if (event === 'playbackError') {
+      const en = currentLanguage === 'en';
+      showToast(data.reason === 'missing'
+        ? (en ? 'Music is not available for this place yet. Try a featured soundscape.' : '这里的音乐尚未收录，先听一首精选音景吧。')
+        : data.reason === 'blocked'
+          ? (en ? 'Tap Play to start listening.' : '请点击播放按钮开始收听。')
+          : (en ? 'Unable to load audio. Tap Play to retry or choose another place.' : '音乐加载失败，点击播放重试，或换一处风景。'));
+    }
     if (event === 'playStateChange') {
+      if (data.isPlaying && data.spot) {
+        storage.addRecentSpot(data.spot.id);
+        discovery.render();
+      }
       playerManager.updatePlayButton(data.isPlaying);
       updateMiniAudioIsland(data.spot, data.isPlaying);
     }
@@ -1224,7 +1260,9 @@ document.addEventListener('DOMContentLoaded', () => {
   favBackdrop?.addEventListener('click', () => toggleFavDrawer(false));
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
-    if (settingsDrawer?.classList.contains('open')) {
+    if (leaderboardDrawer?.classList.contains('open')) {
+      toggleLeaderboardDrawer(false);
+    } else if (settingsDrawer?.classList.contains('open')) {
       event.stopPropagation();
       toggleSettingsDrawer(false);
     } else if (document.getElementById('community-drawer')?.classList.contains('open')) {
@@ -1249,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', () => {
     globeInitPromise.then(() => {
       setTimeout(() => {
         globeManager.flyToSpot(initialSpot, 7.5);
-        updateMiniAudioIsland(initialSpot, false);
+        showSpotPreviewCard(initialSpot);
         const name = getSpotName(initialSpot, currentLanguage);
         showToast(currentLanguage === 'en' ? `Arrived at “${name}” · Tap to enter` : `已定位至「${name}」· 点击即可进入视听`);
       }, 600);

@@ -190,7 +190,7 @@ export class GlobeManager {
   }
 
   async getResolvedStyle(skin) {
-    const targetSkin = skin || '01-dark';
+    const targetSkin = skin || DEFAULT_SETTINGS.mapSkin;
 
     // 1. 03 Fast Deep Blue Theme (极速深海蓝 · 极轻量深蓝夜色 · 秒开加载 - 默认推荐)
     if (targetSkin === '03-fast-blue' || targetSkin === '03-fast-dark' || targetSkin === 'fast-dark' || targetSkin === 'dataviz-dark' || targetSkin === 'fast-blue') {
@@ -1177,13 +1177,8 @@ export class GlobeManager {
         return;
       }
 
-      // Standby Auto-Cruise Trigger:
-      // When the globe starts rotating after standby idle timeout, automatically engage Cruise/Roaming mode!
-      if (!this.isRoaming && this.mapSettings.autoSpin) {
-        this.isRoaming = true;
-        this.showAirplane();
-        this.onRoamingChange?.(true);
-      } else if (this.isRoaming) {
+      // Idle rotation is not consent to enter the separate cruise experience.
+      if (this.isRoaming) {
         if (!this.isAirplaneActive) {
           this.showAirplane();
         }

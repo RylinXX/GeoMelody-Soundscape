@@ -1,4 +1,15 @@
 node_modules/
 dist/
+.env
 .env.local
+.env.production
 .DS_Store
+
+# Runtime data, uploads and logs (production content, not source)
+server/data/
+server/uploads/
+server/logs/
+*.db
+*.db-shm
+*.db-wal
+*.log

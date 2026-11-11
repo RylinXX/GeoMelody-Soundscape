@@ -3,6 +3,7 @@
 
 import cgi
 import json
+import math
 import mimetypes
 import os
 import re
@@ -139,9 +140,17 @@ def parse_float(value, fallback, minimum, maximum):
         number = float(value)
     except (TypeError, ValueError):
         number = fallback
-    if number < minimum or number > maximum:
+    if not math.isfinite(number) or number < minimum or number > maximum:
         raise RequestError('地图坐标超出有效范围', 400, 'INVALID_COORDINATES')
     return number
+
+
+def required_coordinate(value, minimum, maximum):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise RequestError('请确认有效的发布坐标', 400, 'INVALID_COORDINATES')
+    return parse_float(number, 0, minimum, maximum)
 
 
 def format_location(lat, lng):
@@ -363,13 +372,19 @@ class GeoMelodyHandler(BaseHTTPRequestHandler):
             self._send_error_json(error)
 
     def _get_spots(self):
+        params = parse_qs(urlparse(self.path).query)
+        cursor = params.get('cursor', [''])[0]
+        if cursor and (not cursor.isdigit() or len(cursor) > 18):
+            raise RequestError('无效的分页参数', 400, 'INVALID_CURSOR')
         with get_connection() as connection:
             rows = connection.execute('''
                 SELECT id, name, en_name, author, location, country, category,
-                       lat, lng, description, tags, photos, audio_track, created_at
-                FROM spots ORDER BY created_at DESC LIMIT 200
-            ''').fetchall()
-        self._send_json({'success': True, 'spots': [spot_from_row(row) for row in rows]})
+                       lat, lng, description, tags, photos, audio_track, created_at, rowid
+                FROM spots WHERE rowid < ? ORDER BY rowid DESC LIMIT 201
+            ''', (int(cursor) if cursor else 9223372036854775807,)).fetchall()
+        page = rows[:200]
+        self._send_json({'success': True, 'spots': [spot_from_row(row) for row in page],
+                         'nextCursor': str(page[-1][14]) if len(rows) > 200 else None})
 
     def _get_comments(self, params):
         spot_id = clean_text(params.get('spotId', [''])[0], 100)
@@ -509,8 +524,8 @@ class GeoMelodyHandler(BaseHTTPRequestHandler):
                 author = clean_text(form.getfirst('author'), 24, '音乐旅人')
                 description = clean_text(form.getfirst('description'), 280)
                 category = clean_text(form.getfirst('category'), 30, 'town')
-                lat = parse_float(form.getfirst('currentLat') or form.getfirst('lat'), 30.2428, -90, 90)
-                lng = parse_float(form.getfirst('currentLng') or form.getfirst('lng'), 120.1504, -180, 180)
+                lat = required_coordinate(form.getfirst('currentLat') or form.getfirst('lat'), -90, 90)
+                lng = required_coordinate(form.getfirst('currentLng') or form.getfirst('lng'), -180, 180)
 
                 cover_url, cover_path = save_uploaded_file(get_form_item(form, 'cover'), 'cover')
                 if cover_path:
@@ -526,8 +541,8 @@ class GeoMelodyHandler(BaseHTTPRequestHandler):
                 author = clean_text(body.get('author'), 24, '音乐旅人')
                 description = clean_text(body.get('description'), 280)
                 category = clean_text(body.get('category'), 30, 'town')
-                lat = parse_float(body.get('lat'), 30.2428, -90, 90)
-                lng = parse_float(body.get('lng'), 120.1504, -180, 180)
+                lat = required_coordinate(body.get('lat'), -90, 90)
+                lng = required_coordinate(body.get('lng'), -180, 180)
                 cover_url = normalize_local_media_url(body.get('coverUrl'), 'cover')
                 audio_url = normalize_local_media_url(body.get('audioUrl'), 'audio')
                 audio_title = clean_text(body.get('audioTitle'), 120, title)
@@ -538,6 +553,8 @@ class GeoMelodyHandler(BaseHTTPRequestHandler):
                 raise RequestError('音景标题不能为空', 400, 'TITLE_REQUIRED')
             if not description:
                 raise RequestError('音景描述不能为空', 400, 'DESCRIPTION_REQUIRED')
+            if not audio_url or not os.path.isfile(os.path.join(UPLOADS_AUDIO, os.path.basename(audio_url))):
+                raise RequestError('请上传音乐文件后再发布', 400, 'AUDIO_REQUIRED')
 
             spot_id = f'community-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}'
             location_name = format_location(lat, lng)

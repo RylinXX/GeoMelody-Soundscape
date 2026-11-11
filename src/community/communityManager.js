@@ -399,6 +399,13 @@ export class CommunityManager {
   }
 
   bindEvents() {
+    ['pub-current-lat', 'pub-current-lng'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', () => {
+        this.locationRequest = (this.locationRequest || 0) + 1;
+        document.getElementById('pub-confirm-location').checked = false;
+        document.getElementById('current-loc-display').textContent = '手动落点 · 请核对经纬度后确认';
+      });
+    });
     this.toggleButton?.addEventListener('click', () => this.toggle('publish'));
     this.backdrop?.addEventListener('click', () => this.close());
     document.getElementById('btn-close-community-drawer')?.addEventListener('click', () => this.close());
@@ -570,36 +577,36 @@ export class CommunityManager {
     const latInput = document.getElementById('pub-current-lat');
     const lngInput = document.getElementById('pub-current-lng');
 
-    if (!force && this.currentLocationCoords) {
-      if (display) display.textContent = `${this.currentLocationCoords.lat.toFixed(4)}°N, ${this.currentLocationCoords.lng.toFixed(4)}°E (已获取定位)`;
-      if (dot) dot.className = 'current-loc-indicator success';
-      if (latInput) latInput.value = this.currentLocationCoords.lat;
-      if (lngInput) lngInput.value = this.currentLocationCoords.lng;
-      return;
-    }
+    if (!force && latInput?.value && lngInput?.value) return;
+    const request = this.locationRequest = (this.locationRequest || 0) + 1;
+    document.getElementById('pub-confirm-location').checked = false;
+    if (latInput) latInput.value = '';
+    if (lngInput) lngInput.value = '';
 
     if (display) display.textContent = '正在获取当前实时定位…';
     if (dot) dot.className = 'current-loc-indicator';
 
     try {
       const loc = await resolveUserLocation();
+      if (request !== this.locationRequest) return;
+      if (!loc || loc.source === 'default' || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng) || Math.abs(loc.lat) > 90 || Math.abs(loc.lng) > 180) throw new Error('No valid location');
       const lat = loc.lat;
       const lng = loc.lng;
       this.currentLocationCoords = { lat, lng };
       const cityDesc = loc.city ? ` · ${loc.city}` : '';
-      if (display) display.textContent = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E (${loc.source === 'ip-network' ? '网络定位' : '精确定位'}${cityDesc})`;
+      const sourceLabel = { 'ip-network': '网络估算', 'server-ip': '网络估算', cached: '历史位置', 'browser-gps': '设备定位', 'miniprogram-gps': '传入坐标' }[loc.source] || '参考位置';
+      if (display) display.textContent = `${sourceLabel}${cityDesc} · 请核对下方坐标，不准确可手动修改`;
       if (dot) dot.className = 'current-loc-indicator success';
       if (latInput) latInput.value = lat;
       if (lngInput) lngInput.value = lng;
     } catch (err) {
+      if (request !== this.locationRequest) return;
       console.warn('[Publish Location Geolocation]', err);
-      const fallbackLat = 30.2428;
-      const fallbackLng = 120.1504;
-      this.currentLocationCoords = { lat: fallbackLat, lng: fallbackLng };
-      if (display) display.textContent = '定位未开启 (将使用默认: 30.24°N, 120.15°E)';
+      this.currentLocationCoords = null;
+      if (display) display.textContent = '未获取到有效位置，请手动填写发布坐标';
       if (dot) dot.className = 'current-loc-indicator error';
-      if (latInput) latInput.value = fallbackLat;
-      if (lngInput) lngInput.value = fallbackLng;
+      if (latInput) latInput.value = '';
+      if (lngInput) lngInput.value = '';
     }
   }
 
@@ -751,7 +758,7 @@ export class CommunityManager {
               <div class="comment-meta">
                 <span class="comment-avatar" style="--avatar-hue:${avatarHue(author)}">${escapeHtml(author).slice(0, 1).toUpperCase()}</span>
                 <div class="comment-author-block">
-                  <strong>${escapeHtml(author)}</strong>
+                  <strong>${escapeHtml(author)}${comment.isSeed ? (language === LANGUAGES.EN ? ' · Demo' : ' · 示例评论') : ''}</strong>
                   <span>${date}</span>
                 </div>
                 ${comment.id === pinnedId ? `<span class="pinned-badge">${t('pinnedComment', language)}</span>` : ''}
@@ -824,7 +831,7 @@ export class CommunityManager {
               <div class="comment-card-header">
                 <div class="comment-author-info">
                   <span class="comment-avatar" style="--avatar-hue:${avatarHue(author)}">${escapeHtml(author).slice(0, 1).toUpperCase()}</span>
-                  <span class="comment-author-name">${escapeHtml(author)}</span>
+                  <span class="comment-author-name">${escapeHtml(author)}${comment.isSeed ? (language === LANGUAGES.EN ? ' · Demo' : ' · 示例评论') : ''}</span>
                   <span class="comment-time">${date}</span>
                 </div>
                 <div class="comment-header-actions">
@@ -952,6 +959,7 @@ export class CommunityManager {
 
   async publishPost() {
     if (!this.form) return;
+    if (!this.form.reportValidity()) return;
     const formData = new FormData(this.form);
     const title = stripEmoji(formData.get('title') || '');
     const defaultNick = stripEmoji(storage.getUserNickname(t('musicTraveler', this.getLanguage()))) || t('musicTraveler', this.getLanguage());
@@ -974,8 +982,16 @@ export class CommunityManager {
       return;
     }
 
-    const lat = parseFloat(formData.get('currentLat')) || this.currentLocationCoords?.lat || 30.2428;
-    const lng = parseFloat(formData.get('currentLng')) || this.currentLocationCoords?.lng || 120.1504;
+    const lat = Number(formData.get('currentLat'));
+    const lng = Number(formData.get('currentLng'));
+    if (!String(formData.get('currentLat') || '').trim() || !String(formData.get('currentLng') || '').trim() || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || !document.getElementById('pub-confirm-location')?.checked) {
+      this.showToast('请填写有效经纬度并确认公开落点');
+      return;
+    }
+    if (!(audioFile instanceof File) || audioFile.size === 0) {
+      this.showToast('请上传音乐文件后再发布');
+      return;
+    }
     const locationName = `坐标 · ${lng.toFixed(2)}°E, ${lat.toFixed(2)}°N`;
     const country = '当前位置';
 

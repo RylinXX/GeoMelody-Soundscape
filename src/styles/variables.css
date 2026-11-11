@@ -7,6 +7,9 @@
   --bg-card-hover: rgba(28, 38, 56, 0.9);
   --bg-glass: rgba(13, 17, 26, 0.75);
   --bg-glass-heavy: rgba(9, 12, 16, 0.88);
+  --surface-floating: rgba(10, 27, 43, 0.94);
+  --surface-inset: rgba(76, 153, 195, 0.065);
+  --border-floating: rgba(135, 206, 242, 0.2);
 
   /* Borders & Dividers */
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -54,6 +57,9 @@
   --bg-card-hover: rgba(255, 255, 255, 0.96);
   --bg-glass: rgba(244, 249, 251, 0.76);
   --bg-glass-heavy: rgba(247, 250, 252, 0.9);
+  --surface-floating: rgba(241, 249, 253, 0.96);
+  --surface-inset: rgba(2, 132, 199, 0.045);
+  --border-floating: rgba(25, 99, 137, 0.19);
 
   --border-subtle: rgba(25, 57, 72, 0.1);
   --border-medium: rgba(25, 57, 72, 0.2);

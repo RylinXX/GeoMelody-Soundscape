@@ -1,0 +1,57 @@
+/* Shared floating surfaces connect settings, collections and the blue globe. */
+.drawer-panel, .side-drawer, .settings-drawer {
+  top: 16px;
+  bottom: 16px;
+  border: 1px solid var(--border-floating);
+  border-radius: 24px;
+  background: var(--surface-floating);
+  box-shadow: 0 24px 80px rgba(0, 12, 24, .38), inset 0 1px 0 rgba(170, 224, 255, .06);
+  overflow: hidden;
+}
+.drawer-panel.open, .side-drawer.open, .settings-drawer.open { right: 16px !important; }
+.drawer-header { min-height: 92px; padding: 22px 24px; flex-shrink: 0; }
+.drawer-title { font-size: 18px; font-weight: 600; letter-spacing: .02em; }
+.drawer-subtitle { display: block; margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
+.drawer-close-btn { width: 36px; height: 36px; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: 12px; flex-shrink: 0; color: var(--text-secondary); }
+.drawer-close-btn svg { width: 18px; height: 18px; }
+.drawer-close-btn:hover { color: var(--accent-cyan); background: var(--surface-inset); border-color: var(--border-focus); }
+.drawer-backdrop { background: rgba(2, 12, 23, .36); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.drawer-body { min-height: 0; overscroll-behavior: contain; }
+
+#settings-drawer { width: 440px; max-width: calc(100vw - 32px); visibility: hidden; }
+#settings-drawer.open { visibility: visible; }
+.settings-drawer-body { gap: 22px; padding: 24px; }
+.settings-section { gap: 0; flex-shrink: 0; }
+.settings-section-title { font-size: 11px; line-height: 1.5; font-weight: 600; letter-spacing: .1em; text-transform: none; color: var(--text-secondary); margin: 0 0 10px 2px; }
+.settings-section > .setting-item { border: 1px solid var(--border-subtle); background: var(--surface-inset); border-radius: 0; padding: 16px; gap: 16px; }
+.settings-section > .setting-item:first-of-type { border-radius: 14px 14px 0 0; }
+.settings-section > .setting-item:last-of-type { border-radius: 0 0 14px 14px; }
+.settings-section > .setting-item:only-of-type { border-radius: 14px; }
+.settings-section > .setting-item + .setting-item { border-top: 0; }
+.settings-section > .setting-item.setting-item-vertical { border-radius: 14px; }
+.settings-section > .setting-item:hover { background: var(--bg-card-hover); }
+.setting-info { min-width: 0; gap: 5px; }
+.setting-label { font-size: 13px; font-weight: 500; }
+.setting-desc { font-size: 12px; line-height: 1.65; color: var(--text-secondary); }
+.setting-select { min-height: 42px; padding: 10px 12px; border-radius: 10px; background: var(--bg-glass); border-color: var(--border-floating); font: inherit; font-size: 13px; }
+.setting-select option { background: var(--bg-secondary); color: var(--text-primary); }
+.setting-action-btn { min-width: 78px; min-height: 40px; border-radius: 10px; background: var(--bg-glass); }
+.switch-control { width: 44px; height: 30px; }
+.switch-slider { top: 3px; bottom: 3px; background: var(--border-medium); border-color: transparent; }
+.switch-slider:before { left: 3px; bottom: 3px; box-shadow: 0 1px 4px #00152333; }
+.switch-control input:checked + .switch-slider { background: var(--accent-cyan); box-shadow: none; }
+.switch-control input:focus-visible + .switch-slider { outline: 2px solid var(--accent-cyan); outline-offset: 4px; }
+.settings-footer-actions { margin-top: 0; padding-top: 4px; border: 0; justify-content: stretch; }
+.btn-reset-settings { justify-content: center; width: 100%; min-height: 42px; border-radius: 12px; background: transparent; }
+.btn-reset-settings:hover { color: var(--accent-cyan); background: var(--surface-inset); border-color: var(--border-focus); }
+#settings-drawer button:focus-visible, #settings-drawer select:focus-visible, .drawer-close-btn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .drawer-panel, .side-drawer, .settings-drawer { top: max(12px, env(safe-area-inset-top)); bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 24px); max-width: calc(100vw - 24px); border-radius: 20px; }
+  .drawer-panel.open, .side-drawer.open, .settings-drawer.open { right: 12px !important; }
+  #settings-drawer { width: calc(100vw - 24px); max-width: calc(100vw - 24px); }
+  .drawer-header { padding: 18px 20px; min-height: 84px; }
+  .settings-drawer-body { padding: 18px; gap: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-panel, .drawer-backdrop, .switch-slider, .switch-slider:before { transition: none; }
+}

@@ -325,8 +325,9 @@ export class PlayerManager {
 
     if (autoStartAudio) {
       soundEngine.playSpot(spot);
-      this.updatePlayButton(true);
+      this.updatePlayButton(false);
     } else {
+      if (soundEngine.currentSpot?.id !== spot.id) soundEngine.pause();
       this.updatePlayButton(soundEngine.isPlaying);
     }
 
@@ -375,7 +376,7 @@ export class PlayerManager {
     const track = getDemoTrack(spot);
     if (creditEl) {
       const prefix = spot.audioTrack?.url ? t('userUpload', language) : t('demoMusic', language);
-      const credit = `${prefix} · ${track.title} — ${track.creator} · ${track.license}`;
+      const credit = [prefix, `${track.title} — ${track.creator}`, track.license].filter(Boolean).join(' · ');
       const safeSourceUrl = getSafeExternalUrl(track.sourceUrl);
       creditEl.replaceChildren();
       if (safeSourceUrl) {
@@ -821,7 +822,7 @@ export class PlayerManager {
     if (!this.spots.length) return;
 
     const currentTrack = getDemoTrack(this.currentSpot);
-    const otherSpots = this.spots.filter(spot => spot.id !== this.currentSpot?.id);
+    const otherSpots = this.spots.filter(spot => spot.id !== this.currentSpot?.id && getDemoTrack(spot).url);
     const differentTrackSpots = otherSpots.filter(spot => {
       const track = getDemoTrack(spot);
       const sameId = Boolean(currentTrack?.id && track?.id && currentTrack.id === track.id);

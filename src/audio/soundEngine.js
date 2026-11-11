@@ -84,6 +84,8 @@ class SoundEngine {
       });
       this.referenceAudio.addEventListener('error', (err) => {
         console.warn('[GeoMelody Audio] Audio element notice:', err);
+        this.isPlaying = false;
+        this.notify('playStateChange', { isPlaying: false, spot: this.currentSpot });
       });
     }
 
@@ -146,8 +148,8 @@ class SoundEngine {
 
   async resumeContext() {
     if (!this.ctx) this.init();
-    if (this.ctx.state === 'suspended') {
-      await this.ctx.resume();
+    if (this.ctx?.state === 'suspended') {
+      try { await this.ctx.resume(); } catch { /* HTML audio can still play. */ }
     }
   }
 
@@ -192,7 +194,11 @@ class SoundEngine {
 
   // ==================== Playback Lifecycle ====================
   async playSpot(spot, resetTime = false) {
-    await this.resumeContext();
+    const request = this.playRequest = (this.playRequest || 0) + 1;
+    // HTML audio is the primary player; a suspended visualizer context must
+    // never block the user's Play gesture or consume its activation.
+    if (!this.referenceAudio) this.init();
+    void this.resumeContext();
 
     const track = getDemoTrack(spot);
     const isSameSpot = this.currentSpot?.id === spot?.id;
@@ -200,11 +206,10 @@ class SoundEngine {
 
     // If resuming the same spot and track (and resetTime is false), resume from exact paused position!
     if (isSameSpot && isSameTrack && this.referenceAudio && !resetTime && this.referenceAudio.currentTime > 0) {
-      this.isPlaying = true;
-      try {
-        await this.referenceAudio.play();
-      } catch (_) {}
-      this.notify('playStateChange', { isPlaying: true, spot, track: this.currentTrack });
+      const played = await this.playReferenceTrack(track, false);
+      if (request !== this.playRequest) return;
+      this.isPlaying = played;
+      this.notify('playStateChange', { isPlaying: played, spot, track });
       return;
     }
 
@@ -213,19 +218,22 @@ class SoundEngine {
 
     const style = spot.audioRecipe?.style || 'lake_zen';
     this.currentStyle = style;
-    this.isPlaying = true;
+    this.isPlaying = false;
+    this.notify('playStateChange', { isPlaying: false, spot, track });
 
     // Exclusively play user-provided authentic MP3 songs
-    await this.playReferenceTrack(track, true);
+    const played = await this.playReferenceTrack(track, true);
+    if (request !== this.playRequest) return;
+    this.isPlaying = played;
 
     // Keep ambient noise generators completely off
     this.muteAllAmbient();
 
-    this.notify('playStateChange', { isPlaying: true, spot, style, track });
+    this.notify('playStateChange', { isPlaying: played, spot, style, track });
   }
 
   pause() {
-    if (!this.isPlaying) return;
+    this.playRequest = (this.playRequest || 0) + 1;
     this.isPlaying = false;
     if (this.referenceAudio) {
       this.referenceAudio.pause();
@@ -277,7 +285,12 @@ class SoundEngine {
   }
 
   async playReferenceTrack(track, resetTime = false) {
-    if (!track?.url) return false;
+    const request = this.playRequest;
+    if (!track?.url) {
+      this.currentTrack = track;
+      this.notify('playbackError', { reason: 'missing' });
+      return false;
+    }
     if (!this.referenceAudio) this.init();
 
     try {
@@ -296,28 +309,15 @@ class SoundEngine {
       }
 
       await this.referenceAudio.play();
+      if (request !== this.playRequest) return false;
       this.currentTrack = track;
       this.notify('trackChange', { track, spot: this.currentSpot });
       return true;
     } catch (error) {
-      console.warn('[GeoMelody Audio] Autoplay pending user interaction:', error);
-      this.currentTrack = track;
-      this.notify('trackChange', { track, spot: this.currentSpot });
-      
-      const onFirstInteract = async () => {
-        window.removeEventListener('click', onFirstInteract);
-        window.removeEventListener('touchstart', onFirstInteract);
-        window.removeEventListener('keydown', onFirstInteract);
-        if (this.isPlaying && this.currentTrack?.url === track.url) {
-          try {
-            this.syncAudioVolume();
-            await this.referenceAudio.play();
-          } catch (_) {}
-        }
-      };
-      window.addEventListener('click', onFirstInteract, { once: true });
-      window.addEventListener('touchstart', onFirstInteract, { once: true });
-      window.addEventListener('keydown', onFirstInteract, { once: true });
+      if (request !== this.playRequest) return false;
+      if (error.name !== 'AbortError') {
+        this.notify('playbackError', { reason: error.name === 'NotAllowedError' ? 'blocked' : 'unavailable' });
+      }
       return false;
     }
   }

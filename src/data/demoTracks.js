@@ -1207,8 +1207,8 @@ export const DEMO_TRACKS_LIST = Object.values(SUNO_SPOT_TRACKS);
 
 export function getDemoTrack(spot) {
   if (spot?.audioTrack?.url) return spot.audioTrack;
-  if (!spot) return DEMO_TRACKS_LIST[0];
+  if (!spot) return { title: '暂无音乐', creator: 'GeoMelody', url: '' };
   if (spot.id && SUNO_SPOT_TRACKS[spot.id]) return SUNO_SPOT_TRACKS[spot.id];
   if (spot.rawId && SUNO_SPOT_TRACKS[spot.rawId]) return SUNO_SPOT_TRACKS[spot.rawId];
-  return DEMO_TRACKS_LIST[0];
+  return { id: `pending_${spot.id}`, title: '音乐待收录', enTitle: 'Music coming soon', creator: 'GeoMelody', url: '' };
 }
